@@ -1,0 +1,18 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+
+# Generated data and reports
+daily_report.csv
+student_scores.json
+project_data/
+
+# Logs
+*.log
+
+# IDE
+.vscode/

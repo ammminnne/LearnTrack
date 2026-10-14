@@ -1,0 +1,119 @@
+services:
+  #  HADOOP (Storage) 
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    environment:
+      - CLUSTER_NAME=learntrack
+      - HDFS_CONF_dfs_replication=1
+      - HDFS_CONF_fs_defaultFS=hdfs://namenode:8020
+    ports:
+      - "9870:9870"
+      - "8020:8020"
+    networks:
+      - learntrack-net
+    volumes:
+      - ./project_data:/project_data
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    environment:
+      - SERVICE_PRECONDITION=namenode:9870
+      - HDFS_CONF_fs_defaultFS=hdfs://namenode:8020
+    networks:
+      - learntrack-net
+    volumes:
+      - ./project_data:/project_data
+
+  # SPARK (Processing)
+  spark-master:
+    image: bde2020/spark-master:3.0.0-hadoop3.2
+    container_name: spark-master
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    environment:
+      - INIT_DAEMON_STEP=setup_spark
+      - HDFS_CONF_fs_defaultFS=hdfs://namenode:8020
+    networks:
+      - learntrack-net
+    volumes:
+      - ./project_data:/project_data
+
+  spark-worker:
+    image: bde2020/spark-worker:3.0.0-hadoop3.2
+    container_name: spark-worker
+    depends_on:
+      - spark-master
+    environment:
+      - "SPARK_MASTER=spark://spark-master:7077"
+      - HDFS_CONF_fs_defaultFS=hdfs://namenode:8020
+    networks:
+      - learntrack-net
+    volumes:
+      - ./project_data:/project_data
+
+  # MONGODB (Database)
+  mongo-config:
+    image: mongo
+    container_name: mongo-config
+    command: mongod --configsvr --replSet configRS --port 27019 --bind_ip_all
+    ports:
+      - "27019:27019"
+    networks:
+      - learntrack-net
+
+  mongo-shard1:
+    image: mongo
+    container_name: mongo-shard1
+    command: mongod --shardsvr --replSet shard1RS --port 27018 --bind_ip_all
+    ports:
+      - "27018:27018"
+    networks:
+      - learntrack-net
+
+  mongo-shard2:
+    image: mongo
+    container_name: mongo-shard2
+    command: mongod --shardsvr --replSet shard2RS --port 27018 --bind_ip_all
+    ports:
+      - "27028:27018"
+    networks:
+      - learntrack-net
+
+  mongos-router:
+    image: mongo
+    container_name: mongos-router
+    depends_on:
+      - mongo-config
+      - mongo-shard1
+      - mongo-shard2
+    command: mongos --configdb configRS/mongo-config:27019 --bind_ip_all --port 27017
+    ports:
+      - "27017:27017"
+    networks:
+      - learntrack-net
+
+  # AUTOMATION (Jenkins)
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: jenkins
+    ports:
+      - "9090:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      # Mounts the host Docker socket so Jenkins can control the other containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./project_data:/project_data
+    networks:
+      - learntrack-net
+    user: root # Required to access docker.sock without permission errors
+
+networks:
+  learntrack-net:
+    driver: bridge
+
+volumes:
+  jenkins_home:
